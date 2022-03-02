@@ -53,38 +53,32 @@ public class KafkaConsumer {
         return payment;
     }
 
+    Account accountOrigin=null;
     @KafkaListener(topics = Topic.RESPONSE_ACCOUNT_ORIGIN, groupId = "group_id")
     public void consumeResponseAccountOrigin(String param) {
         logger.info("Has been published an response account origin from service account-kr : " + param);
-        getAccountOrigin(param);
+        Account account = null;
+        try {
+            account = JsonUtils.convertFromJsonToObject(param, Account.class);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        accountOrigin=account;
 
     }
 
+    Account accountDestination=null;
     @KafkaListener(topics = Topic.RESPONSE_ACCOUNT_DESTINATION, groupId = "group_id")
     public void consumeResponseAccountDestination(String param) {
         logger.info("Has been published an response account destination from service account-kr : " + param);
-        getAccountDestination(param);
-
-    }
-
-    Account getAccountOrigin(String param) {
         Account account = null;
         try {
             account = JsonUtils.convertFromJsonToObject(param, Account.class);
         } catch (IOException e) {
             e.printStackTrace();
         }
-        return account;
-    }
+        accountDestination=account;
 
-    Account getAccountDestination(String param) {
-        Account account = null;
-        try {
-            account = JsonUtils.convertFromJsonToObject(param, Account.class);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        return account;
     }
 
     public void createPayment(String param) {
@@ -95,14 +89,12 @@ public class KafkaConsumer {
             var result = Mono.just(paymentDto)
                     .map(p -> {
 
-                        var x = getAccountOrigin(p.getNumberPhoneOrigin());
-                        var y = getAccountDestination(p.getNumberPhoneDestination());
-
                         // two events
-                        x.setAvailableBalance(x.getAvailableBalance() - p.getAmount());
-                        kafkaProducer.requestUpdateAccountOrigin(x);
-                        y.setAvailableBalance(y.getAvailableBalance() + p.getAmount());
-                        kafkaProducer.requestUpdateAccountDestination(y);
+                        accountOrigin.setAvailableBalance(accountOrigin.getAvailableBalance() - p.getAmount());
+                        kafkaProducer.requestUpdateAccountOrigin(accountOrigin);
+
+                        accountDestination.setAvailableBalance(accountDestination.getAvailableBalance() + p.getAmount());
+                        kafkaProducer.requestUpdateAccountDestination(accountDestination);
 
                         var today = LocalDateTime.now();
                         p.setDate(DateUtil.toDate(today));
