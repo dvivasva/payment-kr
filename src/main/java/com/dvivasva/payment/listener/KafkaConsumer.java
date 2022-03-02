@@ -1,11 +1,11 @@
 package com.dvivasva.payment.listener;
 
-import com.dvivasva.payment.component.PaymentComponent;
 import com.dvivasva.payment.dto.PaymentDto;
 import com.dvivasva.payment.entity.Account;
 import com.dvivasva.payment.entity.Payment;
 import com.dvivasva.payment.service.KafkaProducer;
 import com.dvivasva.payment.service.PaymentService;
+import com.dvivasva.payment.utils.DateUtil;
 import com.dvivasva.payment.utils.JsonUtils;
 import com.dvivasva.payment.utils.Topic;
 import lombok.RequiredArgsConstructor;
@@ -16,6 +16,7 @@ import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
 import java.io.IOException;
+import java.time.LocalDateTime;
 
 @RequiredArgsConstructor
 @Component
@@ -31,13 +32,13 @@ public class KafkaConsumer {
     public void consumeGateway(String param) {
         logger.info("Has been published an insert payment from service gateway-mobile : " + param);
 
-        var result=Mono.just(getPayment(param));
+        var result = Mono.just(getPayment(param));
         result.doOnNext(payment -> {
-              kafkaProducer.sendCellOriginToWallet(payment.getNumberPhoneOrigin());
-              kafkaProducer.sendCellDestinationToWallet(payment.getNumberPhoneDestination());
+            kafkaProducer.sendCellOriginToWallet(payment.getNumberPhoneOrigin());
+            kafkaProducer.sendCellDestinationToWallet(payment.getNumberPhoneDestination());
 
-              logger.info("send  message to wallet -->");
-              // createPayment(payment);
+            logger.info("send  message to wallet -->");
+            createPayment(param);
         }).subscribe();
 
     }
@@ -55,51 +56,36 @@ public class KafkaConsumer {
     @KafkaListener(topics = Topic.RESPONSE_ACCOUNT_ORIGIN, groupId = "group_id")
     public void consumeResponseAccountOrigin(String param) {
         logger.info("Has been published an response account origin from service account-kr : " + param);
-       /* var result=Mono.just(getPayment(param));
-        result.doOnNext(payment -> {
-            kafkaProducer.sendCellOriginToWallet(payment.getNumberPhoneOrigin());
-            kafkaProducer.sendCellDestinationToWallet(payment.getNumberPhoneDestination());
-
-            logger.info("send  message to wallet -->");
-            // createPayment(payment);
-        }).subscribe();*/
+        getAccountOrigin(param);
 
     }
-    @KafkaListener(topics = Topic.RESPONSE_ACCOUNT_ORIGIN, groupId = "group_id")
+
+    @KafkaListener(topics = Topic.RESPONSE_ACCOUNT_DESTINATION, groupId = "group_id")
     public void consumeResponseAccountDestination(String param) {
-        logger.info("Has been published an response account origin from service account-kr : " + param);
+        logger.info("Has been published an response account destination from service account-kr : " + param);
+        getAccountDestination(param);
 
     }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    Account getAccount(String paramX) {
+    Account getAccountOrigin(String param) {
         Account account = null;
         try {
-            account = JsonUtils.convertFromJsonToObject(paramX, Account.class);
+            account = JsonUtils.convertFromJsonToObject(param, Account.class);
         } catch (IOException e) {
             e.printStackTrace();
         }
         return account;
     }
 
-
-
-
-
-
+    Account getAccountDestination(String param) {
+        Account account = null;
+        try {
+            account = JsonUtils.convertFromJsonToObject(param, Account.class);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return account;
+    }
 
     public void createPayment(String param) {
 
@@ -109,26 +95,18 @@ public class KafkaConsumer {
             var result = Mono.just(paymentDto)
                     .map(p -> {
 
-                        var x = getAccount(p.getNumberPhoneOrigin());
-                        var y = getAccount(p.getNumberPhoneDestination());
+                        var x = getAccountOrigin(p.getNumberPhoneOrigin());
+                        var y = getAccountDestination(p.getNumberPhoneDestination());
 
                         // two events
+                        x.setAvailableBalance(x.getAvailableBalance() - p.getAmount());
+                        kafkaProducer.requestUpdateAccountOrigin(x);
+                        y.setAvailableBalance(y.getAvailableBalance() + p.getAmount());
+                        kafkaProducer.requestUpdateAccountDestination(y);
 
-                        var account1 = Mono.just(x)
-                                .map(account -> {
-                                    account.setAvailableBalance(account.getAvailableBalance() - p.getAmount());
-                                    // sendToMSAccount(account)
-                                    return account;
-                                });
-
-                        var account2 = Mono.just(y)
-                                .map(account -> {
-                                    account.setAvailableBalance(account.getAvailableBalance() + p.getAmount());
-                                    // sendToMSAccount(account)
-                                    return account;
-                                });
-
-                       return p;
+                        var today = LocalDateTime.now();
+                        p.setDate(DateUtil.toDate(today));
+                        return p;
 
                     });
 
@@ -140,12 +118,6 @@ public class KafkaConsumer {
         }
     }
 
-    /*
-    @KafkaListener(topics = "ins-payment-json", groupId = "group_json",
-            containerFactory = "paymentKafkaListenerFactory")
-    public void consumeJson(Payment payment) {
-        logger.info("Consumed JSON Message: " + payment);
-    }*/
 
 
 }
