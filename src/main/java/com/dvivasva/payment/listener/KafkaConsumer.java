@@ -1,9 +1,11 @@
 package com.dvivasva.payment.listener;
 
 import com.dvivasva.payment.component.PaymentComponent;
+import com.dvivasva.payment.dto.PaymentDto;
 import com.dvivasva.payment.entity.Account;
 import com.dvivasva.payment.entity.Payment;
 import com.dvivasva.payment.service.KafkaProducer;
+import com.dvivasva.payment.service.PaymentService;
 import com.dvivasva.payment.utils.JsonUtils;
 import com.dvivasva.payment.utils.Topic;
 import lombok.RequiredArgsConstructor;
@@ -21,7 +23,8 @@ public class KafkaConsumer {
 
 
     private static final Logger logger = LoggerFactory.getLogger(KafkaConsumer.class);
-    private final PaymentComponent  paymentComponent;
+
+    private final PaymentService paymentService;
     private final KafkaProducer kafkaProducer;
 
     @KafkaListener(topics = Topic.INS_PAYMENT, groupId = "group_id")
@@ -100,11 +103,10 @@ public class KafkaConsumer {
 
     public void createPayment(String param) {
 
-        var payment = new Payment();
+        var paymentDto = new PaymentDto();
         try {
-            payment = JsonUtils.convertFromJsonToObject(param, Payment.class);
-
-            var result = Mono.just(payment)
+            paymentDto = JsonUtils.convertFromJsonToObject(param, PaymentDto.class);
+            var result = Mono.just(paymentDto)
                     .map(p -> {
 
                         var x = getAccount(p.getNumberPhoneOrigin());
@@ -126,20 +128,19 @@ public class KafkaConsumer {
                                     return account;
                                 });
 
-                        return paymentComponent.create(p);
+                       return p;
 
                     });
 
-            result.doOnNext(p -> logger.info("registry success" + p))
+            paymentService.create(result).doOnNext(p -> logger.info("registry success" + p))
                     .subscribe();
 
         } catch (IOException e) {
             e.printStackTrace();
         }
-
     }
-/*
 
+    /*
     @KafkaListener(topics = "ins-payment-json", groupId = "group_json",
             containerFactory = "paymentKafkaListenerFactory")
     public void consumeJson(Payment payment) {
