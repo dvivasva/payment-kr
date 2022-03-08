@@ -1,11 +1,6 @@
 spring:
   application:
     name: payment-kr
-  cache:
-    type: redis
-    redis:
-      time-to-live: 60000
-      cache-null-values: true
   data:
       mongodb:
         uri: mongodb+srv://navlag:Fg3UgAroDl8SDVDt@avsavivd.lfqko.mongodb.net/pmactoob?retryWrites=true&w=majority
